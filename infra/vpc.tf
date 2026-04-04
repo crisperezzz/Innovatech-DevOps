@@ -1,4 +1,8 @@
 # vpc.tf
+#region
+provider "aws" {
+  region = "us-east-1" 
+}
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16" # Requerido por pauta [cite: 21]
   enable_dns_hostnames = true
@@ -18,6 +22,6 @@ resource "aws_eip" "nat" {
 
 resource "aws_nat_gateway" "nat" {
   allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.public.id # Se pone en la pública para dar internet a la privada
+  subnet_id = aws_subnet.public_front.id # Se pone en la pública para dar internet a la privada
   tags          = { Name = "main-nat" }
 }
