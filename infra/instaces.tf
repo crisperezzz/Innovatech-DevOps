@@ -1,20 +1,11 @@
 # instances.tf
 
+# 1. TEMPLATE DE LANZAMIENTO (HARDWARE BASE)
 resource "aws_launch_template" "innovatech_tpl" {
   name_prefix   = "innovatech-tpl-"
-  image_id      = "ami-0c02fb55956c7d316" # Amazon Linux 2 (Correcta para el Lab)
+  image_id      = "ami-0c02fb55956c7d316" # Amazon Linux 2
   instance_type = "t2.micro"
   key_name      = "spa-key" 
-
-  # Automatización Global (IE5): Instalación de Docker y Git
-  user_data = base64encode(<<-EOF
-              #!/bin/bash
-              yum update -y
-              yum install -y docker git
-              systemctl start docker
-              systemctl enable docker
-              EOF
-  )
 
   tag_specifications {
     resource_type = "instance"
@@ -22,7 +13,7 @@ resource "aws_launch_template" "innovatech_tpl" {
   }
 }
 
-# 1. CAPA FRONTEND (Pública)
+# 2. CAPA FRONTEND (PÚBLICA)
 resource "aws_instance" "frontend" {
   launch_template {
     id      = aws_launch_template.innovatech_tpl.id
@@ -30,24 +21,28 @@ resource "aws_instance" "frontend" {
   }
   subnet_id              = aws_subnet.public_front.id
   vpc_security_group_ids = [aws_security_group.frontend_sg.id]
-  iam_instance_profile   = "LabInstanceProfile" # Acceso SSM (IE10)
+  iam_instance_profile   = "LabInstanceProfile"
 
-  # Automatización específica del Front (IE5): Servidor Web automático
   user_data = base64encode(<<-EOF
               #!/bin/bash
-              yum update -y
-              yum install -y docker
+              # Reintentar actualización hasta que el gestor de paquetes esté libre
+              until yum update -y; do sleep 5; done
+              until yum install -y docker; do sleep 5; done
+              
               systemctl start docker
               systemctl enable docker
-              # Levantar Nginx automáticamente para la Demo Funcional (IE9)
-              docker run -d --name web-front -p 80:80 nginx
+              
+              # Reintentar descarga y ejecución de Nginx (IE9)
+              until docker run -d --name web-front -p 80:80 nginx; do
+                sleep 10
+              done
               EOF
   )
 
   tags = { Name = "EC2-Frontend" }
 }
 
-# 2. CAPA BACKEND (Privada)
+# 3. CAPA BACKEND (PRIVADA)
 resource "aws_instance" "backend" {
   launch_template {
     id      = aws_launch_template.innovatech_tpl.id
@@ -57,10 +52,21 @@ resource "aws_instance" "backend" {
   vpc_security_group_ids = [aws_security_group.backend_sg.id]
   iam_instance_profile   = "LabInstanceProfile"
 
+  user_data = base64encode(<<-EOF
+              #!/bin/bash
+              until ping -c 1 google.com; do sleep 5; done
+              until yum update -y; do sleep 5; done
+              until yum install -y docker git; do sleep 5; done
+              
+              systemctl start docker
+              systemctl enable docker
+              EOF
+  )
+
   tags = { Name = "EC2-Backend" }
 }
 
-# 3. CAPA DATA (Base de Datos Privada)
+# 4. CAPA DATA (BASE DE DATOS PRIVADA)
 resource "aws_instance" "database" {
   launch_template {
     id      = aws_launch_template.innovatech_tpl.id
@@ -70,15 +76,21 @@ resource "aws_instance" "database" {
   vpc_security_group_ids = [aws_security_group.db_sg.id]
   iam_instance_profile   = "LabInstanceProfile"
 
-  # Automatización de Motor de BD MySQL (IE6, IE9)
   user_data = base64encode(<<-EOF
               #!/bin/bash
-              yum update -y
-              yum install -y docker
+              # Esperar conexión a Internet vía NAT Gateway
+              until ping -c 1 google.com; do sleep 5; done
+              
+              until yum update -y; do sleep 5; done
+              until yum install -y docker; do sleep 5; done
+              
               systemctl start docker
               systemctl enable docker
-              # Levantar MySQL automáticamente
-              docker run -d --name innovatech-db -e MYSQL_ROOT_PASSWORD=Admin123! -p 3306:3306 mysql:8.0
+              
+              # Reintentar despliegue de MySQL (IE6)
+              until docker run -d --name innovatech-db -e MYSQL_ROOT_PASSWORD=Admin123! -p 3306:3306 mysql:8.0; do
+                sleep 15
+              done
               EOF
   )
 
